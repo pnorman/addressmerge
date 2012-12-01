@@ -82,3 +82,16 @@ addresses = UnionView(
     ),
     mappings = [point_addresses, polygon_addresses],
 )
+
+admin = Polygons(
+    name = 'admin',
+    mapping = {
+        'boundary': (
+            'administrative',
+        ),
+    },
+    fields = (
+        ('admin_level', OneOfInt('1 2 3 4 5 6 7 8 9 10'.split())),
+        ('name', String()),
+    ),
+)
