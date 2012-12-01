@@ -42,11 +42,11 @@ point_addresses = Points(
     name = 'point_addresses',
     with_type_field = False,
     fields = (
-        ('addr:street', String()),
-        ('addr:postcode', String()),
-        ('addr:city', String()),
-        ('addr:country', String()),
         ('addr:housenumber', String()),
+        ('addr:street', String()),
+        ('addr:city', String()),
+        ('addr:postcode', String()),
+        ('addr:country', String()),
     ),
     mapping = {
         'addr:housenumber': (
@@ -59,11 +59,11 @@ polygon_addresses = Polygons(
     name = 'polygon_addresses',
     with_type_field = False,
     fields = (
-        ('addr:street', String()),
-        ('addr:postcode', String()),
-        ('addr:city', String()),
-        ('addr:country', String()),
         ('addr:housenumber', String()),
+        ('addr:street', String()),
+        ('addr:city', String()),
+        ('addr:postcode', String()),
+        ('addr:country', String()),
     ),
     mapping = {
         'addr:housenumber': (
@@ -74,11 +74,11 @@ polygon_addresses = Polygons(
 addresses = UnionView(
     name = 'addresses',
     fields = (
-        ('addr:street', String()),
-        ('addr:postcode', String()),
-        ('addr:city', String()),
-        ('addr:country', String()),
         ('addr:housenumber', String()),
+        ('addr:street', String()),
+        ('addr:city', String()),
+        ('addr:postcode', String()),
+        ('addr:country', String()),
     ),
     mappings = [point_addresses, polygon_addresses],
 )
