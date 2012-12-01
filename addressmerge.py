@@ -1,10 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import psycopg2
+# Basic modules
 import argparse
 import logging as l
 l.basicConfig(level=l.DEBUG, format="%(message)s")
+
+# Database modules
+import psycopg2
+
+# .osm modules
+from imposm.parser import OSMParser
 
 parser = argparse.ArgumentParser(description='Conflate an address file with existing OSM data')
 
