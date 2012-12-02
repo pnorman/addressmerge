@@ -4,21 +4,27 @@ A tool for merging address data with OSM data
 
 ## Installation ##
 
-addressmerge requires psycopg2. It also requires access to a postgresql database with OSM data for the area imported with imposm. This database will normally be on the same machine as addressmerge although it does not have to be.
+addressmerge requires psycopg2 and imposm.parser. It also requires access to a postgresql database with OSM data for the area imported with imposm. This database will normally be on the same machine as addressmerge although it does not have to be.
 
-To install the minimal requirements on Ubuntu
-
-```
-sudo apt-get install python-psycopg2
-```
-
-To install everything needed to run addressmerge on one machine
+To install the minimal requirements for addressmerge and imposm on Ubuntu, using virtualenv
 
 ```
-sudo apt-get install build-essential python-dev  \
-                     protobuf-compiler libprotobuf-dev libtokyocabinet-dev
-                     python-psycopg2 python-pip python-virtualenv \
-                     postgresql-9.1 postgresql-contrib-9.1 postgis \
-virtualenv venv
-venv/bin/pip install imposm
+sudo apt-get install build-essential python-devel protobuf-compiler \
+					 libprotobuf-dev python-psycopg2 python-pip \
 ```
+
+You can then install imposm for everyone or in a virtual environment
+
+To install for everyone use ```sudo pip install imposm```
+
+To use a virtual environment
+```
+sudo apt-get install python-virtualenv
+virtualenv ~/venv
+~/venv/bin/pip install imposm
+```
+If running with a virtual environment you need to do ```~/venv/bin/python addressmerge.py ...```
+
+It is possible to install ```imposm.parser``` with [less dependencies](http://dev.omniscale.net/imposm.parser/index.html#document-install) than ```imposm```.
+
+Installation of postgresql+postgis is beyond the scope of this readme.
