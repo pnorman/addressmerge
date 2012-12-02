@@ -21,4 +21,9 @@ parser.add_argument('--host', default='localhost', help='Hostname for database. 
 parser.add_argument('-p', '--port', default=5432, type=int, help='Port for database. Defaults to 5432.')
 parser.add_argument('-P', '--password', default='osm',  help='Password for database. Defaults to osm.')
 
+# .osm parser options
+
+parser.add_argument('--threads', default=None, type=int,  help='Threads to use when parsing the input OSM file')
+parser.add_argument('input', type=argparse.FileType('r'), help='Input OSM file')
+
 args = parser.parse_args()
