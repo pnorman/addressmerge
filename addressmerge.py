@@ -14,6 +14,11 @@ from imposm.parser import OSMParser
 
 parser = argparse.ArgumentParser(description='Conflate an address file with existing OSM data')
 
+# Basic options
+verbosity = parser.add_mutually_exclusive_group()
+verbosity.add_argument("-v", "--verbose", action="store_true")
+verbosity.add_argument("-q", "--quiet", action="store_true")
+
 # Database options
 parser.add_argument('-d', '--dbname', default='osm', help='Database to connect to. Defaults to osm.')
 parser.add_argument('-U', '--username', default='osm', help='Username for database. Defaults to osm.')
