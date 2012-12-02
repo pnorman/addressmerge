@@ -28,6 +28,6 @@ parser.add_argument('-P', '--password', default='osm',  help='Password for datab
 
 # .osm parser options
 parser.add_argument('--threads', default=None, type=int,  help='Threads to use when parsing the input OSM file')
-parser.add_argument('input', type=argparse.FileType('r'), help='Input OSM file')
+parser.add_argument('input', help='Input OSM file')
 
 args = parser.parse_args()
