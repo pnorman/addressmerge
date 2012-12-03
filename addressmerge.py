@@ -4,7 +4,7 @@
 # Basic modules
 import argparse
 import logging as l
-l.basicConfig(level=l.DEBUG, format="%(message)s")
+l.basicConfig(level=l.DEBUG)
 
 # Database modules
 import psycopg2
@@ -27,13 +27,27 @@ parser.add_argument('-p', '--port', default=5432, type=int, help='Port for datab
 parser.add_argument('-P', '--password', default='osm',  help='Password for database. Defaults to osm.')
 
 # .osm parser options
-parser.add_argument('--threads', default=None, type=int,  help='Threads to use when parsing the input OSM file')
+parser.add_argument('--threads', default=1, type=int,  help='Threads to use when parsing the input OSM file')
 parser.add_argument('input', help='Input OSM file')
 
 args = parser.parse_args()
 
-class OSMDocument(object):
+class OSMSource(object):
+    def __init__(self, database, user, password, host, port)
+        l.debug('Connecting to postgresql')
+        self._conn=psycopg2.connect(database=database, user=username, password=password, host=host, port=str(port))
+        self._conn.set_session(readonly=True, autocommit=True)
+        self._curs = self._conn.cursor()
+
+class ImportDocument(object):
     newNodes = []
+    def __init__(self)
+        pass
+
+    def tag_filter(self, tags):
+        for key in tags.keys():
+            if key not in ('addr:housenumber', 'addr:street', 'addr:city'):
+                del tags[key]
 
     def nodes(self, nodes):
         '''
@@ -46,6 +60,4 @@ class OSMDocument(object):
 class Node(object):
     pass
 
-conn = psycopg2.connect(database=args.dbname, user=args.username, password=args.password, host=args.host, port=str(args.port))
-conn.set_session(readonly=True, autocommit=True)
-curs=conn.cursor()
+existing = OSMSource(database=args.dbname, user=args.username, password=args.password, host=args.host, port=str(args.port))
