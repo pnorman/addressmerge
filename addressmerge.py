@@ -31,3 +31,21 @@ parser.add_argument('--threads', default=None, type=int,  help='Threads to use w
 parser.add_argument('input', help='Input OSM file')
 
 args = parser.parse_args()
+
+class OSMDocument(object):
+    newNodes = []
+
+    def nodes(self, nodes):
+        '''
+        Callback method for nodes
+        '''
+        for osmid, tags, refs in nodes:
+            if ('addr:housenumber' in tags) and ('addr:street' in tags):
+                pass
+
+class Node(object):
+    pass
+
+conn = psycopg2.connect(database=args.dbname, user=args.username, password=args.password, host=args.host, port=str(args.port))
+conn.set_session(readonly=True, autocommit=True)
+curs=conn.cursor()
