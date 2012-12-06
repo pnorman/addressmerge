@@ -23,8 +23,16 @@ sudo apt-get install python-virtualenv
 virtualenv ~/venv
 ~/venv/bin/pip install imposm
 ```
-If running with a virtual environment you need to do ```~/venv/bin/python addressmerge.py ...```
+If running with a virtual environment you need to do ```source venv/bin/activate``` before running commands.
 
 It is possible to install ```imposm.parser``` with [less dependencies](http://dev.omniscale.net/imposm.parser/index.html#document-install) than ```imposm```.
 
 Installation of postgresql+postgis is beyond the scope of this readme.
+
+## Importing data ##
+To import the data with imposm from ```dump.osm.pbf``` into the database ```osm``` use the command
+
+```
+imposm -d osm -m addressmapping.py --overwrite-cache --read dump.osm.pbf --write --deploy-production-tables --remove-backup-tables
+psql -d osm -f indexes.sql
+```
