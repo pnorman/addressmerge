@@ -27,7 +27,7 @@ If running with a virtual environment you need to do ```source venv/bin/activate
 
 It is possible to install ```imposm.parser``` with [less dependencies](http://dev.omniscale.net/imposm.parser/index.html#document-install) than ```imposm```.
 
-Installation of postgresql+postgis is beyond the scope of this readme.
+Installation of PostgreSQL+PostGIS is beyond the scope of this readme.
 
 ## Importing data ##
 To import the data with imposm from ```dump.osm.pbf``` into the database ```osm``` use the command
