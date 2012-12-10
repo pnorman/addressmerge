@@ -52,7 +52,7 @@ class OSMSource(object):
                                 (import_id, "addr:housenumber", "addr:street", "addr:city")
                                 VALUES (%s, %s, %s, %s);''',
                                 (id, tags['addr:housenumber'], tags['addr:street'], tags['addr:city']))
-            curs.execute('''ANALYZE;''')
+            curs.execute('''ANALYZE import_addresses;''')
             curs.connection.commit()
         except BaseException:
             if curs is not None:
