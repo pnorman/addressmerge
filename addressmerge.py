@@ -30,6 +30,7 @@ class OSMSource(object):
         This function checks that self.ewkt is a valid EWKT string. It will also fail if
         the DB does not have PostGIS enabled or it could not connect.
         '''
+        l.debug('Validating EWKT')
         curs = None
         try:
             curs = self._conn.cursor()
@@ -51,7 +52,8 @@ class OSMSource(object):
                             (import_id integer,
                             "addr:housenumber" varchar(255),
                             "addr:street" varchar(255),
-                            "addr:city" varchar(255));''')
+                            "addr:city" varchar(255),
+                            PRIMARY KEY(import_id));''')
 
             curs.execute('''CREATE TEMPORARY VIEW local_nodes AS
                             SELECT id, tags, geom FROM nodes
@@ -119,11 +121,12 @@ class OSMSource(object):
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''SELECT DISTINCT ON (import_id) import_id FROM local_all
-            JOIN import_addresses
-            ON tags -> 'addr:housenumber' = "addr:housenumber"
-            AND tags -> 'addr:street' = "addr:street"
-            AND tags -> 'addr:city' = "addr:city";''')
+            curs.execute('''DELETE FROM import_addresses USING local_all
+                            WHERE tags -> 'addr:housenumber' = "addr:housenumber"
+                            AND tags -> 'addr:street' = "addr:street"
+                            AND tags -> 'addr:city' = "addr:city"
+                            RETURNING import_id;''')
+            curs.connection.commit()
             return set(id[0] for id in curs.fetchall())
         except BaseException:
             if curs is not None:
