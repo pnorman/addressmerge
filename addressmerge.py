@@ -184,20 +184,22 @@ if __name__ == '__main__':
     verbosity.add_argument("-q", "--quiet", action="store_true")
 
     # Database options
-    parser.add_argument('-d', '--dbname', default='osm', help='Database to connect to. Defaults to osm.')
-    parser.add_argument('-U', '--username', default='osm', help='Username for database. Defaults to osm.')
-    parser.add_argument('--host', default='localhost', help='Hostname for database. Defaults to localhost.')
-    parser.add_argument('-p', '--port', default=5432, type=int, help='Port for database. Defaults to 5432.')
-    parser.add_argument('-P', '--password', default='osm',  help='Password for database. Defaults to osm.')
+    database_group = parser.add_argument_group('Database options', 'Options that effect the database connection')
+    database_group.add_argument('-d', '--dbname', default='osm', help='Database to connect to. Defaults to osm.')
+    database_group.add_argument('-U', '--username', default='osm', help='Username for database. Defaults to osm.')
+    database_group.add_argument('--host', default='localhost', help='Hostname for database. Defaults to localhost.')
+    database_group.add_argument('-p', '--port', default=5432, type=int, help='Port for database. Defaults to 5432.')
+    database_group.add_argument('-P', '--password', default='osm',  help='Password for database. Defaults to osm.')
 
     # .osm parser options
-    parser.add_argument('--threads', default=None, type=int, help='Threads to use when parsing the input OSM file')
-    parser.add_argument('input', help='Input OSM file')
-    parser.add_argument('output', type=argparse.FileType('w'), help='Output OSM file')
+    osm_group = parser.add_argument_group('OSM options', 'Options that effect the OSM files')
+    osm_group.add_argument('--threads', default=None, type=int, help='Threads to use when parsing the input OSM file')
+    osm_group.add_argument('input', help='Input OSM file')
+    osm_group.add_argument('output', type=argparse.FileType('w'), help='Output OSM file')
 
     # processing options
 
-    parser.add_argument('-e', '--ewkt', type=argparse.FileType('r'), help='Well-known text (EWKT) file with a POLYGON or other area type to search for addresses in')
+    parser.add_argument('-e', '--ewkt', type=argparse.FileType('r'), help='Well-known text (EWKT) file with a POLYGON or other area type to search for addresses in', required=True)
 
     args = parser.parse_args()
 
