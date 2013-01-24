@@ -15,26 +15,26 @@ from imposm.parser import OSMParser
 from lxml import etree
 
 class OSMSource(object):
-    def __init__(self, database, user, password, host, port, ewkt):
+    def __init__(self, database, user, password, host, port, wkt):
         l.debug('Connecting to postgresql')
         self._conn=psycopg2.connect(database=database, user=user, 
                                     password=password, host=host, 
                                     port=str(port))
         self._conn.set_session(readonly=False, autocommit=False)
-        self.ewkt = ewkt
-        self.validate_ewkt()
+        self.wkt = wkt
+        self.validate_wkt()
         self.create_table()
 
-    def validate_ewkt(self):
+    def validate_wkt(self):
         '''
-        This function checks that self.ewkt is a valid EWKT string. It will also fail if
+        This function checks that self.wkt is a valid WKT string. It will also fail if
         the DB does not have PostGIS enabled or it could not connect.
         '''
-        l.debug('Validating EWKT')
+        l.debug('Validating WKT')
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''SELECT %s::geometry;''', (self.ewkt,))
+            curs.execute('''SELECT ST_GeomFromText(%s,4326);''', (self.wkt,))
             curs.connection.rollback()
         except BaseException:
             if curs is not None:
@@ -57,13 +57,13 @@ class OSMSource(object):
 
             curs.execute('''CREATE TEMPORARY VIEW local_nodes AS
                             SELECT id, tags, geom FROM nodes
-                            WHERE ST_Intersects(geom,%s::geometry);''',
-                            (self.ewkt,))
+                            WHERE ST_Intersects(geom, ST_GeomFromText(%s,4326));''',
+                            (self.wkt,))
 
             curs.execute('''CREATE TEMPORARY VIEW local_ways AS
                             SELECT id, tags, linestring AS geom FROM ways
-                            WHERE ST_Intersects(linestring,%s::geometry);''',
-                            (self.ewkt,))
+                            WHERE ST_Intersects(linestring,ST_GeomFromText(%s,4326));''',
+                            (self.wkt,))
 
             curs.execute('''CREATE TEMPORARY VIEW local_mps AS
                             SELECT relation_id AS id,
@@ -199,14 +199,14 @@ if __name__ == '__main__':
 
     # processing options
 
-    parser.add_argument('-e', '--ewkt', type=argparse.FileType('r'), help='Well-known text (EWKT) file with a POLYGON or other area type to search for addresses in', required=True)
+    parser.add_argument('-w', '--wkt', type=argparse.FileType('r'), help='Well-known text (WKT) file with a POLYGON or other area type to search for addresses in', required=True)
 
     args = parser.parse_args()
 
     existing = OSMSource( database=args.dbname, user=args.username,
                           password=args.password, host=args.host,
                           port=str(args.port),
-                          ewkt=args.ewkt.read())
+                          wkt=args.wkt.read())
 
     source = ImportDocument()
 
