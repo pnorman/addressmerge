@@ -11,7 +11,10 @@ import copy
 import psycopg2
 
 # .osm modules
-from imposm.parser import OSMParser
+# This imports the single-threaded XML parser from imposm.
+# This is more reliable with strangely formatted but valid XML
+# and the speed differences don't matter for small files
+from imposm.parser.xml.parser import XMLParser as OSMParser
 from lxml import etree
 
 class OSMSource(object):
@@ -193,7 +196,6 @@ if __name__ == '__main__':
 
     # .osm parser options
     osm_group = parser.add_argument_group('OSM options', 'Options that effect the OSM files')
-    osm_group.add_argument('--threads', default=None, type=int, help='Threads to use when parsing the input OSM file')
     osm_group.add_argument('input', help='Input OSM file')
     osm_group.add_argument('output', type=argparse.FileType('w'), help='Output OSM file')
 
