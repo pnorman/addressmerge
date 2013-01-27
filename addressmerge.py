@@ -48,6 +48,7 @@ class OSMSource(object):
                 curs.close()
 
     def create_table(self):
+        l.debug('Creating tables')
         curs = None
         try:
             curs = self._conn.cursor()
@@ -93,6 +94,7 @@ class OSMSource(object):
 
             curs.execute('''ANALYZE local_all;''');
             curs.connection.commit()
+
         except BaseException:
             if curs is not None:
                 curs.connection.rollback()
@@ -102,6 +104,7 @@ class OSMSource(object):
                 curs.close()
 
     def load_addresses(self, addresses):
+        l.debug('Loading addresses')
         curs = None
         try:
             curs = self._conn.cursor()
@@ -121,6 +124,7 @@ class OSMSource(object):
                 curs.close()
 
     def find_duplicates(self):
+        l.debug('Finding duplicates')
         curs = None
         try:
             curs = self._conn.cursor()
@@ -163,9 +167,7 @@ class ImportDocument(object):
         f.write('\n')
 
     def remove_existing(self, source):
-        l.debug('Loading addresses')
         source.load_addresses(self._nodes)
-        l.debug('Finding duplicates')
         duplicates = source.find_duplicates()
         l.debug('Removing duplicates')
         self._nodes = filter(lambda node: node[0] not in duplicates, self._nodes)
