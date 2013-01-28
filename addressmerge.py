@@ -9,6 +9,7 @@ import copy
 
 # Database modules
 import psycopg2
+import psycopg2.extras
 
 # .osm modules
 # This imports the single-threaded XML parser from imposm.
@@ -24,6 +25,7 @@ class OSMSource(object):
                                     password=password, host=host, 
                                     port=str(port))
         self._conn.set_session(readonly=False, autocommit=False)
+        psycopg2.extras.register_hstore(self._conn, unicode=True)
         self.wkt = wkt
         self.validate_wkt()
         self.create_table()
@@ -54,10 +56,7 @@ class OSMSource(object):
             curs = self._conn.cursor()
             curs.execute('''CREATE TEMPORARY TABLE import_addresses
                             (import_id integer,
-                            "addr:housenumber" varchar(255),
-                            "addr:street" varchar(255),
-                            "addr:city" varchar(255),
-                            PRIMARY KEY(import_id));''')
+                            tags hstore);''')
 
             curs.execute('''CREATE TEMPORARY VIEW local_nodes AS
                             SELECT id, tags, geom FROM nodes
@@ -85,14 +84,24 @@ class OSMSource(object):
                             GROUP BY relation_id, relation_tags;''')
 
             curs.execute('''CREATE TEMPORARY TABLE local_all
-                            AS SELECT local_nodes.id, 'N'::character(1) AS type,
+                            AS SELECT * FROM (SELECT local_nodes.id, 'N'::character(1) AS type,
                                 local_nodes.tags, local_nodes.geom FROM local_nodes
                             UNION ALL SELECT local_ways.id, 'W'::character(1) AS type,
                                 local_ways.tags, local_ways.geom FROM local_ways
                             UNION ALL SELECT local_mps.id, 'M'::character(1) AS type,
-                                local_mps.tags, local_mps.geom FROM local_mps;''')
-
-            curs.execute('''ANALYZE local_all;''');
+                                local_mps.tags, local_mps.geom FROM local_mps) AS everything
+                            WHERE (tags ? 'addr:housenumber'
+                            OR tags ? 'addr:street'
+                            OR tags ? 'addr:city');''')
+            l.debug('Indexing and analyzing tables')
+            curs.execute('''CREATE INDEX ON local_all (id);''')
+            curs.execute('''CREATE INDEX ON local_all USING gist (geom);''')
+            curs.execute('''CREATE INDEX local_all_addr_idx ON local_all USING btree
+                            ((local_all.tags -> 'addr:housenumber'),
+                            (local_all.tags -> 'addr:street'),
+                            (local_all.tags -> 'addr:city'))''')
+            curs.execute('''ANALYZE local_all;''')
+            l.debug('Committing transaction')
             curs.connection.commit()
 
         except BaseException:
@@ -110,9 +119,14 @@ class OSMSource(object):
             curs = self._conn.cursor()
             for (id, tags, _) in addresses:
                 curs.execute('''INSERT INTO import_addresses
-                                (import_id, "addr:housenumber", "addr:street", "addr:city")
-                                VALUES (%s, %s, %s, %s);''',
-                                (id, tags['addr:housenumber'], tags['addr:street'], tags['addr:city']))
+                                (import_id, tags)
+                                VALUES (%s, %s);''',
+                                (id, tags))
+            l.debug('Indexing and analyzing tables')
+            curs.execute('''CREATE INDEX import_addresses_addr_idx ON import_addresses USING btree
+                        ((import_addresses.tags -> 'addr:housenumber'),
+                        (import_addresses.tags -> 'addr:street'),
+                        (import_addresses.tags -> 'addr:city'));''')
             curs.execute('''ANALYZE import_addresses;''')
             curs.connection.commit()
         except BaseException:
@@ -129,10 +143,13 @@ class OSMSource(object):
         try:
             curs = self._conn.cursor()
             curs.execute('''DELETE FROM import_addresses USING local_all
-                            WHERE tags -> 'addr:housenumber' = "addr:housenumber"
-                            AND tags -> 'addr:street' = "addr:street"
-                            AND tags -> 'addr:city' = "addr:city"
-                            RETURNING import_id;''')
+                            WHERE local_all.tags -> 'addr:housenumber' = import_addresses.tags -> 'addr:housenumber'
+                            AND (local_all.tags -> 'addr:housenumber') IS NOT NULL
+                            AND local_all.tags -> 'addr:street' = import_addresses.tags -> 'addr:street'
+                            AND (local_all.tags -> 'addr:housenumber') IS NOT NULL
+                            AND local_all.tags -> 'addr:city' = import_addresses.tags -> 'addr:city'
+                            AND (local_all.tags -> 'addr:housenumber') IS NOT NULL
+                            RETURNING import_addresses.import_id;''')
             curs.connection.commit()
             return set(id[0] for id in curs.fetchall())
         except BaseException:
