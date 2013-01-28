@@ -124,9 +124,9 @@ class OSMSource(object):
                                 (id, tags))
             l.debug('Indexing and analyzing tables')
             curs.execute('''CREATE INDEX import_addresses_addr_idx ON import_addresses USING btree
-                        ((import_addresses.tags -> 'addr:housenumber'),
-                        (import_addresses.tags -> 'addr:street'),
-                        (import_addresses.tags -> 'addr:city'));''')
+                            ((import_addresses.tags -> 'addr:housenumber'),
+                            (import_addresses.tags -> 'addr:street'),
+                            (import_addresses.tags -> 'addr:city'));''')
             curs.execute('''ANALYZE import_addresses;''')
             curs.connection.commit()
         except BaseException:
