@@ -162,13 +162,11 @@ class OSMSource(object):
 
 class ImportDocument(object):
     newNodes = []
-    def __init__(self):
+    def __init__(self, input):
         self._parser = OSMParser(nodes_callback=self._parse_nodes)
         self._nodes = deque()
-
-    def parse_osm(self, filename):
-        l.debug('Parsing %s', filename)
-        self._parser.parse(filename)
+        l.debug('Parsing %s', input)
+        self._parser.parse(input)
 
     def _parse_nodes(self, nodes):
         for node in nodes:
@@ -229,8 +227,7 @@ if __name__ == '__main__':
                           port=str(args.port),
                           wkt=args.wkt.read())
 
-    source = ImportDocument()
+    source = ImportDocument(args.input)
 
-    source.parse_osm(args.input)
     source.remove_existing(existing)
     source.output_osm(args.output)
