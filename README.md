@@ -4,7 +4,7 @@ A tool for merging address data with OSM data
 
 ## Installation ##
 
-addressmerge requires psycopg2 and imposm.parser. It also requires access to a postgresql database with OSM data for the area imported with osmosis using a pgsnapshot schema. This database will normally be on the same machine as addressmerge although it does not have to be.
+addressmerge requires psycopg2 and imposm.parser. It also requires access to a postgresql 9.1 or later database with OSM data for the area imported with osmosis using a pgsnapshot schema. This database will normally be on the same machine as addressmerge although it does not have to be.
 
 To install the minimal requirements for addressmerge and imposm on Ubuntu, using virtualenv
 
