@@ -57,7 +57,7 @@ class OSMSource(object):
         try:
             curs = self._conn.cursor()
             curs.execute('''CREATE TEMPORARY TABLE import_addresses
-                            (import_id integer,
+                            (import_id integer PRIMARY KEY,
                             geom geometry,
                             tags hstore,
                             pending_delete boolean DEFAULT FALSE);''')
@@ -99,7 +99,6 @@ class OSMSource(object):
 
             l.debug('Indexing and analyzing tables')
             curs.execute('''ALTER TABLE local_all ADD PRIMARY KEY (type, id) WITH (FILLFACTOR=100);''')
-            curs.execute('''CREATE INDEX ON local_all (id) WITH (FILLFACTOR=100);''')
             curs.execute('''CREATE INDEX ON local_all USING gist (geom) WITH (FILLFACTOR=100);''')
             curs.execute('''CREATE INDEX local_all_addr_idx ON local_all USING btree
                             ((local_all.tags -> 'addr:housenumber'),
@@ -124,17 +123,17 @@ class OSMSource(object):
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''CREATE TABLE changed_nodes
+            curs.execute('''CREATE TEMPORARY TABLE changed_nodes
                             (id bigint PRIMARY KEY CHECK (id > 0),
                             version integer CHECK (version > 1),
                             geom geometry,
                             tags hstore);''')
-            curs.execute('''CREATE TABLE changed_ways
+            curs.execute('''CREATE TEMPORARY TABLE changed_ways
                             (id bigint PRIMARY KEY CHECK (id > 0),
                             version integer CHECK (version > 1),
                             nodes bigint[],
                             tags hstore);''')
-            curs.execute('''CREATE TABLE changed_relations
+            curs.execute('''CREATE TEMPORARY TABLE changed_relations
                             (id bigint PRIMARY KEY CHECK (id > 0),
                             version integer CHECK (version > 1),
                             tags hstore);''')
@@ -212,8 +211,7 @@ class OSMSource(object):
                                 AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
                                 AND local_all.type='N'
                                 AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
-                                RETURNING import_addresses.import_id AS import_id,
-                                local_all.id AS id,
+                                RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
                                 INSERT INTO changed_nodes (id, version, geom, tags)
                                 SELECT nodes.id,(nodes.version+1),nodes.geom, to_delete.merged_tags
@@ -228,8 +226,7 @@ class OSMSource(object):
                                 AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
                                 AND local_all.type='W'
                                 AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
-                                RETURNING import_addresses.import_id AS import_id, -- import_id needed?
-                                local_all.id AS id,
+                                RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
                                 INSERT INTO changed_ways (id, version, nodes, tags)
                                 SELECT ways.id,(ways.version+1),ways.nodes, to_delete.merged_tags
@@ -245,8 +242,7 @@ class OSMSource(object):
                                 AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
                                 AND local_all.type='M'
                                 AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
-                                RETURNING import_addresses.import_id AS import_id,
-                                local_all.id AS id,
+                                RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
                                 SELECT id, version, tags,
                                 array_agg(member_id) AS ids,
