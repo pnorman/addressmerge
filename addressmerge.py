@@ -126,17 +126,20 @@ class OSMSource(object):
             curs.execute('''CREATE TEMPORARY TABLE changed_nodes
                             (id bigint PRIMARY KEY CHECK (id > 0),
                             version integer CHECK (version > 1),
-                            geom geometry,
-                            tags hstore);''')
+                            tags hstore,
+                            geom geometry);''')
             curs.execute('''CREATE TEMPORARY TABLE changed_ways
                             (id bigint PRIMARY KEY CHECK (id > 0),
                             version integer CHECK (version > 1),
-                            nodes bigint[],
-                            tags hstore);''')
+                            tags hstore,
+                            nodes bigint[]);''')
             curs.execute('''CREATE TEMPORARY TABLE changed_relations
                             (id bigint PRIMARY KEY CHECK (id > 0),
                             version integer CHECK (version > 1),
-                            tags hstore);''')
+                            tags hstore,
+                            types character(1)[],
+                            ids bigint[],
+                            roles text[]);''')
         except BaseException:
             if curs is not None:
                 curs.connection.rollback()
@@ -213,8 +216,8 @@ class OSMSource(object):
                                 AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
                                 RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
-                                INSERT INTO changed_nodes (id, version, geom, tags)
-                                SELECT nodes.id,(nodes.version+1),nodes.geom, to_delete.merged_tags
+                                INSERT INTO changed_nodes (id, version, tags, geom)
+                                SELECT nodes.id, (nodes.version+1), to_delete.merged_tags, nodes.geom
                                 FROM to_delete JOIN nodes ON to_delete.id=nodes.id;''', (nocity,))
                 curs.execute('''WITH to_delete AS
                                 (UPDATE import_addresses
@@ -228,8 +231,8 @@ class OSMSource(object):
                                 AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
                                 RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
-                                INSERT INTO changed_ways (id, version, nodes, tags)
-                                SELECT ways.id,(ways.version+1),ways.nodes, to_delete.merged_tags
+                                INSERT INTO changed_ways (id, version, tags, nodes)
+                                SELECT ways.id, (ways.version+1), to_delete.merged_tags, ways.nodes
                                 FROM to_delete JOIN ways ON to_delete.id=ways.id;''', (nocity,))
                 # no one likes relations, but we need to support them
                 curs.execute('''WITH to_delete AS
@@ -244,27 +247,73 @@ class OSMSource(object):
                                 AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
                                 RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
+                                INSERT INTO changed_relations
+                                (id, version, tags, types, ids, roles)
                                 SELECT id, version, tags,
+                                array_agg(member_type) AS types,
                                 array_agg(member_id) AS ids,
-                                array_agg(member_type) AS ways,
                                 array_agg(member_role) AS roles
                                 FROM (SELECT relations.id, (relations.version + 1) AS version,
                                 merged_tags AS tags,
-                                member_type,member_id,member_role
+                                member_type, member_id, member_role
                                 FROM to_delete JOIN relations
                                 ON to_delete.id=relations.id
                                 JOIN relation_members
                                 ON relations.id = relation_members.relation_id
                                 ORDER BY sequence_id ASC) AS combined_relations
                                 GROUP BY id,version,tags;''', (nocity,))
-            curs.execute('''ANALYZE import_addresses;''')
+
             curs.execute('''DELETE FROM import_addresses
                             WHERE pending_delete
                             RETURNING import_id;''')
             deleted |= set(id[0] for id in curs.fetchall())
+            curs.execute('''ANALYZE import_addresses;''')
             curs.connection.commit()
 
             return deleted
+        except BaseException:
+            if curs is not None:
+                curs.connection.rollback()
+            raise
+        finally:
+            if curs is not None:
+                curs.close()
+
+    def get_changed_nodes(self):
+        curs = None
+        try:
+            curs = self._conn.cursor()
+            curs.execute('''SELECT id, version, tags, ST_X(geom) AS x, ST_Y(geom) AS y FROM changed_nodes;''')
+            curs.connection.rollback()
+            return set(curs.fetchall())
+        except BaseException:
+            if curs is not None:
+                curs.connection.rollback()
+            raise
+        finally:
+            if curs is not None:
+                curs.close()
+    def get_changed_ways(self):
+        curs = None
+        try:
+            curs = self._conn.cursor()
+            curs.execute('''SELECT id, version, tags, nodes FROM changed_ways;''')
+            curs.connection.rollback()
+            return (curs.fetchall())
+        except BaseException:
+            if curs is not None:
+                curs.connection.rollback()
+            raise
+        finally:
+            if curs is not None:
+                curs.close()
+    def get_changed_relations(self):
+        curs = None
+        try:
+            curs = self._conn.cursor()
+            curs.execute('''SELECT id, version, tags, types, ids, roles FROM changed_relations;''')
+            curs.connection.rollback()
+            return (curs.fetchall())
         except BaseException:
             if curs is not None:
                 curs.connection.rollback()
@@ -290,30 +339,69 @@ class ImportDocument(object):
             tag = etree.Element('tag',  {'k':k, 'v':v})
             xmlnode.append(tag)
 
-        f.write(etree.tostring(xmlnode))
-        f.write('\n')
+        f.write(etree.tostring(xmlnode, pretty_print=True))
 
-    def remove_existing(self, source):
-        source.load_addresses(self._nodes)
-        duplicates = source.find_duplicates()
+    def _serialize_modify_node(self, f, node):
+        # A node is a tuple of (id, version, tags, x, y)
+        print node
+        xmlnode = etree.Element('node', {'id':str(node[0]), 'version':str(node[1]),  'lon':str(node[3]), 'lat':str(node[4])})
+        for (k,v) in node[2].items():
+            tag = etree.Element('tag',  {'k':k, 'v':v})
+            xmlnode.append(tag)
+
+        f.write(etree.tostring(xmlnode, pretty_print=True))
+
+    def _serialize_modify_way(self, f, way):
+        # A way is a tuple of (id, version, tags, nodes)
+        print way
+        xmlway = etree.Element('way', {'id':str(way[0]), 'version':str(way[1])})
+        for ref in way[3]:
+            nd = etree.Element('nd', {'ref':str(ref)})
+            xmlway.append(nd)
+        for (k,v) in way[2].items():
+            tag = etree.Element('tag',  {'k':k, 'v':v})
+            xmlway.append(tag)
+
+        f.write(etree.tostring(xmlway, pretty_print=True))
+
+    def _serialize_modify_relation(self, f, relation):
+        print relation
+
+    def remove_existing(self, existing):
+        existing.load_addresses(self._nodes)
+        duplicates = existing.find_duplicates()
         l.debug('Removing duplicates')
         self._nodes = filter(lambda node: node[0] not in duplicates, self._nodes)
         l.debug('%d duplicates removed', len(duplicates))
 
-    def remove_changed(self, source, **kwargs):
-        duplicates = source.generate_changes(**kwargs)
+    def remove_changed(self, existing, **kwargs):
+        duplicates = existing.generate_changes(**kwargs)
         l.debug('Removing changed')
         self._nodes = filter(lambda node: node[0] not in duplicates, self._nodes)
         l.debug('%d changed removed', len(duplicates))
 
     def output_osm(self, f):
         f.write('<?xml version="1.0"?>\n<osm version="0.6" upload="false" generator="addressmerge">\n')
+        f.write('<modify>\n')
         for node in self._nodes:
             self._serialize_node(f, node)
-        f.write('</osm>')
 
-    def output_osc(self, f):
-        pass
+        f.write('<modify>\n')
+        f.write('</osm>\n')
+
+    def output_osc(self, existing, f):
+        f.write('<?xml version="1.0"?>\n<osmChange version="0.6" upload="false" generator="addressmerge">\n')
+        f.write('<modify>\n')
+        for node in existing.get_changed_nodes():
+            self._serialize_modify_node(f, node)
+
+        for way in existing.get_changed_ways():
+            self._serialize_modify_way(f, way)
+
+        for relation in existing.get_changed_relations():
+            self._serialize_modify_relation(f, relation)
+        f.write('</modify>\n')
+        f.write('</osmChange>\n')
 
 if __name__ == '__main__':
     import argparse
@@ -357,4 +445,4 @@ if __name__ == '__main__':
     source.remove_existing(existing)
     source.remove_changed(existing, nocity=args.nocity)
     source.output_osm(args.output)
-    source.output_osc(args.osc)
+    source.output_osc(existing, args.osc)
