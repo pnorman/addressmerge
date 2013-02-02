@@ -92,10 +92,7 @@ class OSMSource(object):
                             UNION ALL SELECT local_ways.id, 'W'::character(1) AS type,
                                 local_ways.tags, local_ways.geom FROM local_ways
                             UNION ALL SELECT local_mps.id, 'M'::character(1) AS type,
-                                local_mps.tags, local_mps.geom FROM local_mps) AS everything
-                            WHERE (tags ? 'addr:housenumber'
-                            OR tags ? 'addr:street'
-                            OR tags ? 'addr:city'));''')
+                                local_mps.tags, local_mps.geom FROM local_mps) AS everything);''')
 
             l.debug('Indexing and analyzing tables')
             curs.execute('''ALTER TABLE local_all ADD PRIMARY KEY (type, id) WITH (FILLFACTOR=100);''')
@@ -343,7 +340,6 @@ class ImportDocument(object):
 
     def _serialize_modify_node(self, f, node):
         # A node is a tuple of (id, version, tags, x, y)
-        print node
         xmlnode = etree.Element('node', {'id':str(node[0]), 'version':str(node[1]),  'lon':str(node[3]), 'lat':str(node[4])})
         for (k,v) in node[2].items():
             tag = etree.Element('tag',  {'k':k, 'v':v})
@@ -353,7 +349,6 @@ class ImportDocument(object):
 
     def _serialize_modify_way(self, f, way):
         # A way is a tuple of (id, version, tags, nodes)
-        print way
         xmlway = etree.Element('way', {'id':str(way[0]), 'version':str(way[1])})
         for ref in way[3]:
             nd = etree.Element('nd', {'ref':str(ref)})
@@ -365,6 +360,17 @@ class ImportDocument(object):
         f.write(etree.tostring(xmlway, pretty_print=True))
 
     def _serialize_modify_relation(self, f, relation):
+        # A relation is a tuple of (id, version, tags, types, ids, roles)
+        xmlrelation = etree.Element('relation', {'id':str(relation[0]), 'version':str(relation[1])})
+        typelookup = {'N':'node', 'W':'way', 'R':'relation'}
+        for i in xrange(0, len(relation[3])):
+            member = etree.Element('member', {'type':typelookup[str(relation[3][i])], 'ref':str(relation[4][i]), 'role':str(relation[5][i])})
+            xmlrelation.append(member)
+        for (k,v) in relation[2].items():
+            tag = etree.Element('tag',  {'k':k, 'v':v})
+            xmlrelation.append(tag)
+
+        f.write(etree.tostring(xmlrelation, pretty_print=True))
         print relation
 
     def remove_existing(self, existing):
