@@ -3,6 +3,4 @@
 
 # OSM files
 *.osm
-
-# imposm files
-*.cache
+*.osc
