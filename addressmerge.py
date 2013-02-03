@@ -19,7 +19,7 @@ from imposm.parser.xml.parser import XMLParser as OSMParser
 from lxml import etree
 
 class OSMSource(object):
-    def __init__(self, database, user, password, host, port, wkt, changes):
+    def __init__(self, database, user, password, host, port, wkt, strippable, changes):
         l.debug('Connecting to postgresql')
         self._conn=psycopg2.connect(database=database, user=user, 
                                     password=password, host=host, 
@@ -27,6 +27,7 @@ class OSMSource(object):
         self._conn.set_session(readonly=False, autocommit=False)
         psycopg2.extras.register_hstore(self._conn, unicode=True)
         self.wkt = wkt
+        self.strippable=strippable
         self.validate_wkt()
         self.create_tables()
         if changes:
@@ -280,7 +281,7 @@ class OSMSource(object):
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''SELECT id, version, tags, ST_X(geom) AS x, ST_Y(geom) AS y FROM changed_nodes;''')
+            curs.execute('''SELECT id, version, tags-%s, ST_X(geom) AS x, ST_Y(geom) AS y FROM changed_nodes;''',(self.strippable,))
             curs.connection.rollback()
             return set(curs.fetchall())
         except BaseException:
@@ -294,7 +295,7 @@ class OSMSource(object):
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''SELECT id, version, tags, nodes FROM changed_ways;''')
+            curs.execute('''SELECT id, version, tags-%s, nodes FROM changed_ways;''',(self.strippable,))
             curs.connection.rollback()
             return (curs.fetchall())
         except BaseException:
@@ -308,7 +309,7 @@ class OSMSource(object):
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''SELECT id, version, tags, types, ids, roles FROM changed_relations;''')
+            curs.execute('''SELECT id, version, tags-%s, types, ids, roles FROM changed_relations;''',(self.strippable,))
             curs.connection.rollback()
             return (curs.fetchall())
         except BaseException:
@@ -371,7 +372,6 @@ class ImportDocument(object):
             xmlrelation.append(tag)
 
         f.write(etree.tostring(xmlrelation, pretty_print=True))
-        print relation
 
     def remove_existing(self, existing):
         existing.load_addresses(self._nodes)
@@ -430,6 +430,7 @@ if __name__ == '__main__':
     file_group.add_argument('output', type=argparse.FileType('w'), help='Output OSM file')
     file_group.add_argument('--osc', type=argparse.FileType('w'), default=None, help='Output OSC file')
     file_group.add_argument('-w', '--wkt', type=argparse.FileType('r'), help='Well-known text (WKT) file with a POLYGON or other area type to search for addresses in', required=True)
+    file_group.add_argument('-r', '--remove-tags', type=argparse.FileType('r'), default=None, help='File with list of tags to remove from any modified objects')
 
     osc_group = parser.add_argument_group('OSC options', 'Options that effect the .osc results. Output OSC file required')
     osc_group.add_argument('--nocity', type=float, default=None, help='Distance to detect matches without a city')
@@ -440,11 +441,19 @@ if __name__ == '__main__':
         if args.nocity is not None:
             raise argparse.ArgumentTypeError('--osc is required if diff generating options are used')
 
+    if args.remove_tags is None:
+        striplist = set(['created_by', 'odbl', 'odbl:note'])
+    else:
+        striplist = set(line.strip() for line in args.remove_tags.readlines()).union(set(['created_by', 'odbl', 'odbl:note']))
+    print striplist
+
     existing = OSMSource( database=args.dbname, user=args.username,
                           password=args.password, host=args.host,
                           port=str(args.port),
                           wkt=args.wkt.read(),
+                          strippable=list(striplist),
                           changes=args.osc!=None)
+
 
     source = ImportDocument(args.input)
 

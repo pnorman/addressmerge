@@ -1,0 +1,13 @@
+tiger:upload_uuid
+tiger:source
+tiger:tlid
+tiger:separated
+geobase:datasetName
+geobase:uuid
+sub_sea:type
+yh:LINE_NAME
+yh:LINE_NUM
+yh:STRUCTURE
+yh:TOTYUMONO	
+yh:TYPE
+yh:WIDTH_RANK
