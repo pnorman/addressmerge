@@ -388,11 +388,9 @@ class ImportDocument(object):
 
     def output_osm(self, f):
         f.write('<?xml version="1.0"?>\n<osm version="0.6" upload="false" generator="addressmerge">\n')
-        f.write('<modify>\n')
         for node in self._nodes:
             self._serialize_node(f, node)
 
-        f.write('<modify>\n')
         f.write('</osm>\n')
 
     def output_osc(self, existing, f):
@@ -445,7 +443,6 @@ if __name__ == '__main__':
         striplist = set(['created_by', 'odbl', 'odbl:note'])
     else:
         striplist = set(line.strip() for line in args.remove_tags.readlines()).union(set(['created_by', 'odbl', 'odbl:note']))
-    print striplist
 
     existing = OSMSource( database=args.dbname, user=args.username,
                           password=args.password, host=args.host,
