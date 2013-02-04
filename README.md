@@ -30,6 +30,7 @@ It is possible to install ```imposm.parser``` with [less dependencies](http://de
 Installation of osmosis and PostgreSQL+PostGIS is beyond the scope of this readme.
 
 ## Importing data ##
+
 It is possible to use an existing pgsnapshot database kept up to date with minutely diffs. This is beyond the scope of this readme.
 
 To import the data with imposm from ```dump.osm.pbf``` into the database ```osm``` with postgis and hstore already set up on the database use the commands
@@ -38,3 +39,33 @@ To import the data with imposm from ```dump.osm.pbf``` into the database ```osm`
 psql -d osm -f <path-to-osmosis>/script/pgsnapshot_schema_0.6.sql
 osmosis --read-pbf dump.osm.pbf --write-pgsql host=localhost database=osm user=osm
 ```
+
+## Usage ##
+
+The syntax for addressmerge is
+
+```
+./addressmerge.py [-h] [DATABASE OPTIONS] input.osm output.osm -w bounds.wkt [--osc output.osc [OSC OPTIONS]]
+```
+For a full listing of options see ```./addressmerge.py -h```
+
+Database options are
+
+```
+  Options that effect the database connection
+
+  -d DBNAME, --dbname DBNAME
+                        Database to connect to. Defaults to osm.
+  -U USERNAME, --username USERNAME
+                        Username for database. Defaults to osm.
+  --host HOST           Hostname for database. Defaults to localhost.
+  -p PORT, --port PORT  Port for database. Defaults to 5432.
+  -P PASSWORD, --password PASSWORD
+                        Password for database. Defaults to osm.
+```
+
+addressmerge will take the address data in ```input.osm```, connect to the specified pgsnapshot database, filter out any exact address matches and output the new set of addresses to ```output.osm```. It can also produce various changes to the existing OSM data, filtering more addresses from ```output.osm```
+
+## OSC (diff) generation ##
+
+addressmerge has the ability to generate an osmChange (.osc) file based on a series of filters. Filters are run in two stages. The first stage is for filters that match against existing addresses but are not an exact match. The second stage adds address information to features that did not have it before.
