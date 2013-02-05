@@ -19,7 +19,7 @@ from imposm.parser.xml.parser import XMLParser as OSMParser
 from lxml import etree
 
 class OSMSource(object):
-    def __init__(self, database, user, password, host, port, wkt, strippable, changes):
+    def __init__(self, database, user, password, host, port, wkt, strippable, changes, buffer):
         l.debug('Connecting to postgresql')
         self._conn=psycopg2.connect(database=database, user=user, 
                                     password=password, host=host, 
@@ -27,7 +27,8 @@ class OSMSource(object):
         self._conn.set_session(readonly=False, autocommit=False)
         psycopg2.extras.register_hstore(self._conn, unicode=True)
         self.wkt = wkt
-        self.strippable=strippable
+        self.strippable = strippable
+        self.buffer = buffer
         self.validate_wkt()
         self.create_tables()
         if changes:
@@ -185,8 +186,16 @@ class OSMSource(object):
                             AND (local_all.tags -> 'addr:housenumber') IS NOT NULL
                             RETURNING import_addresses.import_id;''')
             deleted = set(id[0] for id in curs.fetchall())
-            curs.execute('''ANALYZE import_addresses;''')
-            curs.connection.commit()
+            curs.execute('''ALTER TABLE import_addresses
+                            ADD COLUMN buffered_geom geometry;''')
+            curs.execute('''UPDATE import_addresses
+                            SET buffered_geom = geometry(ST_Buffer(geography(geom),%s));''',
+                            (self.buffer,))
+            curs.execute('''CREATE INDEX ON import_addresses
+                            USING gist (buffered_geom)
+                            WITH (FILLFACTOR=100);''')
+            curs.execute('''COMMIT;''')
+            curs.execute('''VACUUM ANALYZE import_addresses;''')
             return deleted
         except BaseException:
             if curs is not None:
@@ -430,8 +439,11 @@ if __name__ == '__main__':
     file_group.add_argument('-w', '--wkt', type=argparse.FileType('r'), help='Well-known text (WKT) file with a POLYGON or other area type to search for addresses in', required=True)
     file_group.add_argument('-r', '--remove-tags', type=argparse.FileType('r'), default=None, help='File with list of tags to remove from any modified objects')
 
-    osc_group = parser.add_argument_group('OSC options', 'Options that effect the .osc results. Output OSC file required')
-    osc_group.add_argument('--nocity', type=float, default=None, help='Distance to detect matches without a city')
+    matching_group = parser.add_argument_group('Matching options', 'Options that effect the .osc results. Output OSC file required')
+    matching_group.add_argument('--nocity', type=float, default=None, help='Distance to detect matches without a city')
+
+    other_group = parser.add_argument_group('Other options')
+    other_group = other_group.add_argument('--buffer', type=float, default=0.5, help='Buffer distance in meters around existing addresses')
 
     args = parser.parse_args()
 
@@ -449,7 +461,8 @@ if __name__ == '__main__':
                           port=str(args.port),
                           wkt=args.wkt.read(),
                           strippable=list(striplist),
-                          changes=args.osc!=None)
+                          changes=args.osc!=None,
+                          buffer=args.buffer)
 
 
     source = ImportDocument(args.input)
