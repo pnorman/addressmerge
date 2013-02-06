@@ -336,7 +336,7 @@ class OSMSource(object):
             curs = self._conn.cursor()
             curs.execute('''SELECT id, version, tags-%s, ST_X(geom) AS x, ST_Y(geom) AS y FROM changed_nodes;''',(self.strippable,))
             curs.connection.rollback()
-            return set(curs.fetchall())
+            return (curs.fetchall())
         except BaseException:
             if curs is not None:
                 curs.connection.rollback()
