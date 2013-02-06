@@ -161,7 +161,8 @@ class OSMSource(object):
             curs.execute('''CREATE INDEX import_addresses_addr_idx ON import_addresses USING btree
                             ((import_addresses.tags -> 'addr:housenumber'),
                             (import_addresses.tags -> 'addr:street'),
-                            (import_addresses.tags -> 'addr:city'));''')
+                            (import_addresses.tags -> 'addr:city'))
+                            WITH (FILLFACTOR=100);''')
             curs.execute('''ANALYZE import_addresses;''')
             curs.connection.commit()
         except BaseException:
@@ -205,7 +206,7 @@ class OSMSource(object):
             if curs is not None:
                 curs.close()
 
-    def generate_changes(self, nocity=None):
+    def generate_changes(self, nocity=None, building=None):
         deleted = set()
         curs = None
         try:
@@ -270,6 +271,49 @@ class OSMSource(object):
                                 ORDER BY sequence_id ASC) AS combined_relations
                                 GROUP BY id,version,tags;''', (nocity,))
 
+            if building is not None:
+                curs.execute('''CREATE  VIEW building_matches AS -- create this as a view since we'll be using it multiple times, and it's complex
+                                  SELECT possible_matches.import_id,
+                                    possible_matches.merged_tags,
+                                    possible_matches.id, possible_matches.type,
+                                    possible_matches.building_geom,
+                                    other_import_addresses.import_id AS other_id
+                                    FROM (
+                                      SELECT
+                                        import_id,
+                                        (import_addresses.tags || local_all.tags) AS merged_tags,
+                                        import_addresses.buffered_geom,
+                                        id, type,
+                                        ST_MakePolygon(local_all.geom) AS building_geom
+                                      FROM import_addresses JOIN local_all
+                                      ON import_addresses.buffered_geom && local_all.geom -- buildings aren't polygons yet so we can't use ST_Intersects, but this filter drastically brings down the matches that we need to MakePolygon on
+                                      WHERE local_all.tags ? 'building' -- well-formed buildings without addresses
+                                        AND (local_all.tags -> 'addr:housenumber') IS NULL
+                                        AND ST_IsClosed(local_all.geom)
+                                      OFFSET 0 --force the subquery to run without optimizing it out to avoid calling ST_IsValid on a MakePolygon of a non-closed linestring
+                                    ) AS possible_matches -- buildings that might match
+                                    LEFT JOIN import_addresses AS other_import_addresses -- we want to filter out buildings that would match multiple import addrs
+                                      ON possible_matches.import_id != other_import_addresses.import_id -- different point
+                                      AND ST_Intersects(possible_matches.building_geom, other_import_addresses.buffered_geom) -- but still in the building.
+                                      -- the st_intersects produces a geometry_gist_joinsel notice
+                                    LEFT JOIN local_all AS other_osm_addresses -- now we need to filter out cases with nearby OSM addresses
+                                      ON ST_DWithin(geography(possible_matches.building_geom), geography(other_osm_addresses.geom), %s, FALSE) -- With the number of matches at this point this is faster than an intersects + buffer
+                                      AND (other_osm_addresses.tags -> 'addr:housenumber') IS NOT NULL -- this also enforces the two IDs don't match since the inner select has the inverse of this
+                                    WHERE
+                                      ST_IsValid(possible_matches.buffered_geom) -- get rid of self-intersecting, etc
+                                      AND ST_Intersects(possible_matches.buffered_geom, building_geom) -- needs to be actually within, not just bbox overlap
+                                      AND other_import_addresses.import_id IS NULL -- find the ones that don't match to other import addrs
+                                      AND other_osm_addresses.type IS NULL; -- or to existing addrs''', (building,))
+                curs.execute('''WITH to_delete AS (
+                                  UPDATE import_addresses
+                                    SET pending_delete = TRUE
+                                  FROM building_matches
+                                    WHERE import_addresses.import_id = building_matches.import_id
+                                      AND building_matches.type = 'W'
+                                    RETURNING building_matches.id AS id, building_matches.merged_tags )
+                                INSERT INTO changed_ways (id, version, tags, nodes)
+                                  SELECT ways.id, (ways.version+1), to_delete.merged_tags, ways.nodes
+                                    FROM to_delete JOIN ways ON to_delete.id=ways.id;''')
             curs.execute('''DELETE FROM import_addresses
                             WHERE pending_delete
                             RETURNING import_id;''')
@@ -441,6 +485,7 @@ if __name__ == '__main__':
 
     matching_group = parser.add_argument_group('Matching options', 'Options that effect the .osc results. Output OSC file required')
     matching_group.add_argument('--nocity', type=float, default=None, help='Distance to detect matches without a city')
+    matching_group.add_argument('--building', type=float, default=None, help='Distance to search around buildings for existing OSM addresses')
 
     other_group = parser.add_argument_group('Other options')
     other_group = other_group.add_argument('--buffer', type=float, default=0.5, help='Buffer distance in meters around existing addresses')
@@ -468,6 +513,6 @@ if __name__ == '__main__':
     source = ImportDocument(args.input)
 
     source.remove_existing(existing)
-    source.remove_changed(existing, nocity=args.nocity)
+    source.remove_changed(existing, nocity=args.nocity, building=args.building)
     source.output_osm(args.output)
     source.output_osc(existing, args.osc)
