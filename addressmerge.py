@@ -272,7 +272,7 @@ class OSMSource(object):
                                 GROUP BY id,version,tags;''', (nocity,))
 
             if building is not None:
-                curs.execute('''CREATE  VIEW building_matches AS -- create this as a view since we'll be using it multiple times, and it's complex
+                curs.execute('''CREATE TEMPORARY VIEW building_matches AS -- create this as a view since we'll be using it multiple times, and it's complex
                                   SELECT possible_matches.import_id,
                                     possible_matches.merged_tags,
                                     possible_matches.id, possible_matches.type,
