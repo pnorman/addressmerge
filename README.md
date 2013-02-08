@@ -69,3 +69,17 @@ addressmerge will take the address data in ```input.osm```, connect to the speci
 ## OSC (diff) generation ##
 
 addressmerge has the ability to generate an osmChange (.osc) file based on a series of filters. Filters are run in two stages. The first stage is for filters that match against existing addresses but are not an exact match. The second stage adds address information to features that did not have it before.
+
+All distances are in meters.
+
+### buffer ###
+
+```--buffer`` specifies a distance around each address for matching to features where there are small misalignments between the features and the address nodes. It essentially turns each address point into a small circle for matching. Used by ```--building```
+
+### nocity ###
+
+```--nocity``` will find addresses within the specified distance of the import node with the same housenumber and street but missing the city and will add the city. Care should be used in regions with nearby addresses which are duplicates except for the city. Such addresses are also problematic for E911
+
+### building ###
+
+```--building N``` will attempt to match up addresses to buildings. It will not match to buildings with multiple addr nodes in the import or existing data within N meters of the building or to buildings where there is another building within N meters of the matched address.
