@@ -38,12 +38,16 @@ class OSMSource(object):
         '''
         This function checks that self.wkt is a valid WKT string. It will also fail if
         the DB does not have PostGIS enabled or it could not connect.
+
+        It also finds the extents of the WKT
         '''
         l.debug('Validating WKT')
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''SELECT ST_GeomFromText(%s,4326);''', (self.wkt,))
+            curs.execute('''SELECT 9e-6/cos(radians(greatest(abs(ST_YMax(wkt.geom)), abs(ST_YMin(wkt.geom)))))
+                              FROM (SELECT ST_GeomFromText(%s, 4326) AS geom) AS wkt;;''', (self.wkt,))
+            self.scale = curs.fetchone()[0]
             curs.connection.rollback()
         except BaseException:
             if curs is not None:
@@ -195,6 +199,9 @@ class OSMSource(object):
             curs.execute('''CREATE INDEX ON import_addresses
                             USING gist (buffered_geom)
                             WITH (FILLFACTOR=100);''')
+            curs.execute('''CREATE INDEX ON import_addresses
+                            USING gist (geom)
+                            WITH (FILLFACTOR=100);''')
             curs.execute('''COMMIT;''')
             curs.execute('''VACUUM ANALYZE import_addresses;''')
             return deleted
@@ -272,6 +279,7 @@ class OSMSource(object):
                                 GROUP BY id,version,tags;''', (nocity,))
 
             if building is not None:
+                degree_expand = building * self.scale
                 curs.execute('''CREATE TEMPORARY VIEW building_matches AS -- create this as a view since we'll be using it multiple times, and it's complex
                                   SELECT possible_matches.import_id,
                                     possible_matches.merged_tags,
@@ -295,23 +303,26 @@ class OSMSource(object):
                                     AS possible_matches -- buildings that might match
                                     LEFT JOIN import_addresses AS other_import_addresses -- this filters out buildings that would match multiple import addrs
                                       ON possible_matches.import_id != other_import_addresses.import_id -- different point
-                                      AND ST_Intersects(possible_matches.building_geom, other_import_addresses.buffered_geom) -- but still in the building.
+                                      AND ST_Expand(possible_matches.building_geom, %s) && other_import_addresses.geom -- pre-filter for speed
+                                      AND ST_DWithin(geography(possible_matches.building_geom), geography(other_import_addresses.geom), %s, FALSE) -- but still in the building.
                                       -- the st_intersects produces a geometry_gist_joinsel notice
                                     LEFT JOIN local_all AS other_osm_addr_points -- this filters out buildings that would match existing addrs
-                                      ON ST_DWithin(geography(possible_matches.building_geom),geography(other_osm_addr_points.geom), %s, FALSE) -- Same logic as filtering out multiple import addrs, except we don't have precomputed buffers
+                                      ON ST_Expand(possible_matches.building_geom, %s) && other_osm_addr_points.geom -- pre-filter
+                                      AND ST_DWithin(geography(possible_matches.building_geom),geography(other_osm_addr_points.geom), %s, FALSE) -- Same logic as filtering out multiple import addrs, except we don't have precomputed buffers
                                       AND (other_osm_addr_points.tags -> 'addr:housenumber') IS NOT NULL -- there is an addr
                                       AND other_osm_addr_points.id != possible_matches.id -- that isn't the same addr. note: this duplicates the above condition, but is faster
                                       AND other_osm_addr_points.type = 'N' -- Only nodes
                                     LEFT JOIN local_all AS other_osm_addr_areas -- this filters out import nodes that would be too close to another building
-                                      ON ST_DWithin(geography(possible_matches.unbuffered_import_geom), geography(other_osm_addr_areas.geom), %s, FALSE)
+                                      ON ST_Expand(possible_matches.building_geom, %s) && other_osm_addr_areas.geom -- pre-filter
+                                      AND ST_DWithin(geography(possible_matches.unbuffered_import_geom), geography(other_osm_addr_areas.geom), %s, FALSE)
                                       AND other_osm_addr_points.id != possible_matches.id
                                       AND other_osm_addr_areas.type IN ('W', 'M')
                                     WHERE
-                                      ST_IsValid(possible_matches.buffered_geom) -- get rid of self-intersecting, etc
+                                      ST_IsValid(possible_matches.building_geom) -- get rid of self-intersecting, etc
                                       AND ST_Intersects(possible_matches.buffered_geom, building_geom) -- needs to be actually within, not just bbox overlap
                                       AND other_import_addresses.import_id IS NULL -- find the ones that don't match to other import addrs
                                       AND other_osm_addr_points.type IS NULL -- or to existing addr nodes
-                                      AND other_osm_addr_areas.type IS NULL; -- or to existing addr areas''', (self.buffer, building,))
+                                      AND other_osm_addr_areas.type IS NULL; -- or to existing addr areas''', (degree_expand, building, degree_expand, building, degree_expand, building))
                 curs.execute('''WITH to_delete AS (
                                   UPDATE import_addresses
                                     SET pending_delete = TRUE
