@@ -284,26 +284,34 @@ class OSMSource(object):
                                         (import_addresses.tags || local_all.tags) AS merged_tags,
                                         import_addresses.buffered_geom,
                                         id, type,
-                                        ST_MakePolygon(local_all.geom) AS building_geom
+                                        ST_MakePolygon(local_all.geom) AS building_geom,
+                                        import_addresses.geom AS unbuffered_import_geom
                                       FROM import_addresses JOIN local_all
                                       ON import_addresses.buffered_geom && local_all.geom -- buildings aren't polygons yet so we can't use ST_Intersects, but this filter drastically brings down the matches that we need to MakePolygon on
                                       WHERE local_all.tags ? 'building' -- well-formed buildings without addresses
                                         AND (local_all.tags -> 'addr:housenumber') IS NULL
                                         AND ST_IsClosed(local_all.geom)
-                                      OFFSET 0 --force the subquery to run without optimizing it out to avoid calling ST_IsValid on a MakePolygon of a non-closed linestring
-                                    ) AS possible_matches -- buildings that might match
-                                    LEFT JOIN import_addresses AS other_import_addresses -- we want to filter out buildings that would match multiple import addrs
+                                      OFFSET 0) --force the subquery to run without optimizing it out to avoid calling ST_IsValid on a MakePolygon of a non-closed linestring
+                                    AS possible_matches -- buildings that might match
+                                    LEFT JOIN import_addresses AS other_import_addresses -- this filters out buildings that would match multiple import addrs
                                       ON possible_matches.import_id != other_import_addresses.import_id -- different point
                                       AND ST_Intersects(possible_matches.building_geom, other_import_addresses.buffered_geom) -- but still in the building.
                                       -- the st_intersects produces a geometry_gist_joinsel notice
-                                    LEFT JOIN local_all AS other_osm_addresses -- now we need to filter out cases with nearby OSM addresses
-                                      ON ST_DWithin(geography(possible_matches.building_geom), geography(other_osm_addresses.geom), %s, FALSE) -- With the number of matches at this point this is faster than an intersects + buffer
-                                      AND (other_osm_addresses.tags -> 'addr:housenumber') IS NOT NULL -- this also enforces the two IDs don't match since the inner select has the inverse of this
+                                    LEFT JOIN local_all AS other_osm_addr_points -- this filters out buildings that would match existing addrs
+                                      ON ST_DWithin(geography(possible_matches.building_geom),geography(other_osm_addr_points.geom), %s, FALSE) -- Same logic as filtering out multiple import addrs, except we don't have precomputed buffers
+                                      AND (other_osm_addr_points.tags -> 'addr:housenumber') IS NOT NULL -- there is an addr
+                                      AND other_osm_addr_points.id != possible_matches.id -- that isn't the same addr. note: this duplicates the above condition, but is faster
+                                      AND other_osm_addr_points.type = 'N' -- Only nodes
+                                    LEFT JOIN local_all AS other_osm_addr_areas -- this filters out import nodes that would be too close to another building
+                                      ON ST_DWithin(geography(possible_matches.unbuffered_import_geom), geography(other_osm_addr_areas.geom), %s, FALSE)
+                                      AND other_osm_addr_points.id != possible_matches.id
+                                      AND other_osm_addr_areas.type IN ('W', 'M')
                                     WHERE
                                       ST_IsValid(possible_matches.buffered_geom) -- get rid of self-intersecting, etc
                                       AND ST_Intersects(possible_matches.buffered_geom, building_geom) -- needs to be actually within, not just bbox overlap
                                       AND other_import_addresses.import_id IS NULL -- find the ones that don't match to other import addrs
-                                      AND other_osm_addresses.type IS NULL; -- or to existing addrs''', (building,))
+                                      AND other_osm_addr_points.type IS NULL -- or to existing addr nodes
+                                      AND other_osm_addr_areas.type IS NULL; -- or to existing addr areas''', (self.buffer, building,))
                 curs.execute('''WITH to_delete AS (
                                   UPDATE import_addresses
                                     SET pending_delete = TRUE
