@@ -9,7 +9,7 @@ addressmerge requires psycopg2 and imposm.parser. It also requires access to a p
 To install the minimal requirements for addressmerge and imposm on Ubuntu, using virtualenv
 
 ```
-sudo apt-get install build-essential python-devel protobuf-compiler \
+sudo apt-get install build-essential python-dev protobuf-compiler \
 					 libprotobuf-dev python-psycopg2 python-pip
 ```
 
@@ -33,7 +33,7 @@ Installation of osmosis and PostgreSQL+PostGIS is beyond the scope of this readm
 
 It is possible to use an existing pgsnapshot database kept up to date with minutely diffs. This is beyond the scope of this readme.
 
-To import the data with imposm from ```dump.osm.pbf``` into the database ```osm``` with postgis and hstore already set up on the database use the commands
+To import the data with osmosis from ```dump.osm.pbf``` into the database ```osm``` with postgis and hstore already set up on the database use the commands
 
 ```
 psql -d osm -f <path-to-osmosis>/script/pgsnapshot_schema_0.6.sql
