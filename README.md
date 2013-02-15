@@ -74,7 +74,7 @@ All distances are in meters.
 
 ### buffer ###
 
-```--buffer`` specifies a distance around each address for matching to features where there are small misalignments between the features and the address nodes. It essentially turns each address point into a small circle for matching. Used by ```--building```
+```--buffer``` specifies a distance around each address for matching to features where there are small misalignments between the features and the address nodes. It essentially turns each address point into a small circle for matching. Used by ```--building```
 
 ### nocity ###
 
