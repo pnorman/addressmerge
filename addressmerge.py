@@ -299,6 +299,7 @@ class OSMSource(object):
                                       WHERE local_all.tags ? 'building' -- well-formed buildings without addresses
                                         AND (local_all.tags -> 'addr:housenumber') IS NULL
                                         AND ST_IsClosed(local_all.geom)
+                                        AND type IN ('W','M')
                                       OFFSET 0) --force the subquery to run without optimizing it out to avoid calling ST_IsValid on a MakePolygon of a non-closed linestring
                                     AS possible_matches -- buildings that might match
                                     LEFT JOIN import_addresses AS other_import_addresses -- this filters out buildings that would match multiple import addrs
