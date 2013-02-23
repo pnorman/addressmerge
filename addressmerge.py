@@ -62,7 +62,7 @@ class OSMSource(object):
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''CREATE TEMPORARY TABLE import_addresses
+            curs.execute('''CREATE TEMPORARY TABLE import_address_nodes
                             (import_id integer PRIMARY KEY,
                             geom geometry,
                             tags hstore,
@@ -157,17 +157,17 @@ class OSMSource(object):
         try:
             curs = self._conn.cursor()
             for (id, tags, (x, y)) in addresses:
-                curs.execute('''INSERT INTO import_addresses
+                curs.execute('''INSERT INTO import_address_nodes
                                 (import_id, geom, tags)
                                 VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s);''',
                                 (id, x, y, tags))
             l.debug('Indexing and analyzing tables')
-            curs.execute('''CREATE INDEX import_addresses_addr_idx ON import_addresses USING btree
-                            ((import_addresses.tags -> 'addr:housenumber'),
-                            (import_addresses.tags -> 'addr:street'),
-                            (import_addresses.tags -> 'addr:city'))
+            curs.execute('''CREATE INDEX import_address_nodes_addr_idx ON import_address_nodes USING btree
+                            ((import_address_nodes.tags -> 'addr:housenumber'),
+                            (import_address_nodes.tags -> 'addr:street'),
+                            (import_address_nodes.tags -> 'addr:city'))
                             WITH (FILLFACTOR=100);''')
-            curs.execute('''ANALYZE import_addresses;''')
+            curs.execute('''ANALYZE import_address_nodes;''')
             curs.connection.commit()
         except BaseException:
             if curs is not None:
@@ -182,28 +182,28 @@ class OSMSource(object):
         curs = None
         try:
             curs = self._conn.cursor()
-            curs.execute('''DELETE FROM import_addresses USING local_all
-                            WHERE local_all.tags -> 'addr:housenumber' = import_addresses.tags -> 'addr:housenumber'
+            curs.execute('''DELETE FROM import_address_nodes USING local_all
+                            WHERE local_all.tags -> 'addr:housenumber' = import_address_nodes.tags -> 'addr:housenumber'
                             AND (local_all.tags -> 'addr:housenumber') IS NOT NULL
-                            AND local_all.tags -> 'addr:street' = import_addresses.tags -> 'addr:street'
+                            AND local_all.tags -> 'addr:street' = import_address_nodes.tags -> 'addr:street'
                             AND (local_all.tags -> 'addr:housenumber') IS NOT NULL
-                            AND local_all.tags -> 'addr:city' = import_addresses.tags -> 'addr:city'
+                            AND local_all.tags -> 'addr:city' = import_address_nodes.tags -> 'addr:city'
                             AND (local_all.tags -> 'addr:housenumber') IS NOT NULL
-                            RETURNING import_addresses.import_id;''')
+                            RETURNING import_address_nodes.import_id;''')
             deleted = set(id[0] for id in curs.fetchall())
-            curs.execute('''ALTER TABLE import_addresses
+            curs.execute('''ALTER TABLE import_address_nodes
                             ADD COLUMN buffered_geom geometry;''')
-            curs.execute('''UPDATE import_addresses
+            curs.execute('''UPDATE import_address_nodes
                             SET buffered_geom = geometry(ST_Buffer(geography(geom),%s));''',
                             (self.buffer,))
-            curs.execute('''CREATE INDEX ON import_addresses
+            curs.execute('''CREATE INDEX ON import_address_nodes
                             USING gist (buffered_geom)
                             WITH (FILLFACTOR=100);''')
-            curs.execute('''CREATE INDEX ON import_addresses
+            curs.execute('''CREATE INDEX ON import_address_nodes
                             USING gist (geom)
                             WITH (FILLFACTOR=100);''')
             curs.execute('''COMMIT;''')
-            curs.execute('''VACUUM ANALYZE import_addresses;''')
+            curs.execute('''VACUUM ANALYZE import_address_nodes;''')
             return deleted
         except BaseException:
             if curs is not None:
@@ -220,48 +220,48 @@ class OSMSource(object):
             curs = self._conn.cursor()
             if nocity is not None:
                 curs.execute('''WITH to_delete AS
-                                (UPDATE import_addresses
+                                (UPDATE import_address_nodes
                                 SET pending_delete = TRUE
                                 FROM local_all
-                                WHERE import_addresses.tags -> 'addr:housenumber' = local_all.tags -> 'addr:housenumber'
-                                AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
-                                AND import_addresses.tags -> 'addr:street' = local_all.tags -> 'addr:street'
-                                AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
+                                WHERE import_address_nodes.tags -> 'addr:housenumber' = local_all.tags -> 'addr:housenumber'
+                                AND (import_address_nodes.tags -> 'addr:housenumber') IS NOT NULL
+                                AND import_address_nodes.tags -> 'addr:street' = local_all.tags -> 'addr:street'
+                                AND (import_address_nodes.tags -> 'addr:housenumber') IS NOT NULL
                                 AND local_all.type='N'
-                                AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
+                                AND ST_Intersects(ST_Buffer(geography(import_address_nodes.geom),%s)::geometry,local_all.geom)
                                 RETURNING local_all.id AS id,
-                                (import_addresses.tags || local_all.tags) AS merged_tags)
+                                (import_address_nodes.tags || local_all.tags) AS merged_tags)
                                 INSERT INTO changed_nodes (id, version, tags, geom)
                                 SELECT nodes.id, (nodes.version+1), to_delete.merged_tags, nodes.geom
                                 FROM to_delete JOIN nodes ON to_delete.id=nodes.id;''', (nocity,))
                 curs.execute('''WITH to_delete AS
-                                (UPDATE import_addresses
+                                (UPDATE import_address_nodes
                                 SET pending_delete = TRUE
                                 FROM local_all
-                                WHERE import_addresses.tags -> 'addr:housenumber' = local_all.tags -> 'addr:housenumber'
-                                AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
-                                AND import_addresses.tags -> 'addr:street' = local_all.tags -> 'addr:street'
-                                AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
+                                WHERE import_address_nodes.tags -> 'addr:housenumber' = local_all.tags -> 'addr:housenumber'
+                                AND (import_address_nodes.tags -> 'addr:housenumber') IS NOT NULL
+                                AND import_address_nodes.tags -> 'addr:street' = local_all.tags -> 'addr:street'
+                                AND (import_address_nodes.tags -> 'addr:housenumber') IS NOT NULL
                                 AND local_all.type='W'
-                                AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
+                                AND ST_Intersects(ST_Buffer(geography(import_address_nodes.geom),%s)::geometry,local_all.geom)
                                 RETURNING local_all.id AS id,
-                                (import_addresses.tags || local_all.tags) AS merged_tags)
+                                (import_address_nodes.tags || local_all.tags) AS merged_tags)
                                 INSERT INTO changed_ways (id, version, tags, nodes)
                                 SELECT ways.id, (ways.version+1), to_delete.merged_tags, ways.nodes
                                 FROM to_delete JOIN ways ON to_delete.id=ways.id;''', (nocity,))
                 # no one likes relations, but we need to support them
                 curs.execute('''WITH to_delete AS
-                                (UPDATE import_addresses
+                                (UPDATE import_address_nodes
                                 SET pending_delete = TRUE
                                 FROM local_all
-                                WHERE import_addresses.tags -> 'addr:housenumber' = local_all.tags -> 'addr:housenumber'
-                                AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
-                                AND import_addresses.tags -> 'addr:street' = local_all.tags -> 'addr:street'
-                                AND (import_addresses.tags -> 'addr:housenumber') IS NOT NULL
+                                WHERE import_address_nodes.tags -> 'addr:housenumber' = local_all.tags -> 'addr:housenumber'
+                                AND (import_address_nodes.tags -> 'addr:housenumber') IS NOT NULL
+                                AND import_address_nodes.tags -> 'addr:street' = local_all.tags -> 'addr:street'
+                                AND (import_address_nodes.tags -> 'addr:housenumber') IS NOT NULL
                                 AND local_all.type='M'
-                                AND ST_Intersects(ST_Buffer(geography(import_addresses.geom),%s)::geometry,local_all.geom)
+                                AND ST_Intersects(ST_Buffer(geography(import_address_nodes.geom),%s)::geometry,local_all.geom)
                                 RETURNING local_all.id AS id,
-                                (import_addresses.tags || local_all.tags) AS merged_tags)
+                                (import_address_nodes.tags || local_all.tags) AS merged_tags)
                                 INSERT INTO changed_relations
                                 (id, version, tags, types, ids, roles)
                                 SELECT id, version, tags,
@@ -285,27 +285,27 @@ class OSMSource(object):
                                     possible_matches.merged_tags,
                                     possible_matches.id, possible_matches.type,
                                     possible_matches.building_geom,
-                                    other_import_addresses.import_id AS other_id
+                                    other_import_address_nodes.import_id AS other_id
                                     FROM (
                                       SELECT
                                         import_id,
-                                        (import_addresses.tags || local_all.tags) AS merged_tags,
-                                        import_addresses.buffered_geom,
+                                        (import_address_nodes.tags || local_all.tags) AS merged_tags,
+                                        import_address_nodes.buffered_geom,
                                         id, type,
                                         ST_MakePolygon(local_all.geom) AS building_geom,
-                                        import_addresses.geom AS unbuffered_import_geom
-                                      FROM import_addresses JOIN local_all
-                                      ON import_addresses.buffered_geom && local_all.geom -- buildings aren't polygons yet so we can't use ST_Intersects, but this filter drastically brings down the matches that we need to MakePolygon on
+                                        import_address_nodes.geom AS unbuffered_import_geom
+                                      FROM import_address_nodes JOIN local_all
+                                      ON import_address_nodes.buffered_geom && local_all.geom -- buildings aren't polygons yet so we can't use ST_Intersects, but this filter drastically brings down the matches that we need to MakePolygon on
                                       WHERE local_all.tags ? 'building' -- well-formed buildings without addresses
                                         AND (local_all.tags -> 'addr:housenumber') IS NULL
                                         AND ST_IsClosed(local_all.geom)
                                         AND type IN ('W','M')
                                       OFFSET 0) --force the subquery to run without optimizing it out to avoid calling ST_IsValid on a MakePolygon of a non-closed linestring
                                     AS possible_matches -- buildings that might match
-                                    LEFT JOIN import_addresses AS other_import_addresses -- this filters out buildings that would match multiple import addrs
-                                      ON possible_matches.import_id != other_import_addresses.import_id -- different point
-                                      AND ST_Expand(possible_matches.building_geom, %s) && other_import_addresses.geom -- pre-filter for speed
-                                      AND ST_DWithin(geography(possible_matches.building_geom), geography(other_import_addresses.geom), %s, FALSE) -- but still in the building.
+                                    LEFT JOIN import_address_nodes AS other_import_address_nodes -- this filters out buildings that would match multiple import addrs
+                                      ON possible_matches.import_id != other_import_address_nodes.import_id -- different point
+                                      AND ST_Expand(possible_matches.building_geom, %s) && other_import_address_nodes.geom -- pre-filter for speed
+                                      AND ST_DWithin(geography(possible_matches.building_geom), geography(other_import_address_nodes.geom), %s, FALSE) -- but still in the building.
                                       -- the st_intersects produces a geometry_gist_joinsel notice
                                     LEFT JOIN local_all AS other_osm_addr_points -- this filters out buildings that would match existing addrs
                                       ON ST_Expand(possible_matches.building_geom, %s) && other_osm_addr_points.geom -- pre-filter
@@ -321,24 +321,24 @@ class OSMSource(object):
                                     WHERE
                                       ST_IsValid(possible_matches.building_geom) -- get rid of self-intersecting, etc
                                       AND ST_Intersects(possible_matches.buffered_geom, building_geom) -- needs to be actually within, not just bbox overlap
-                                      AND other_import_addresses.import_id IS NULL -- find the ones that don't match to other import addrs
+                                      AND other_import_address_nodes.import_id IS NULL -- find the ones that don't match to other import addrs
                                       AND other_osm_addr_points.type IS NULL -- or to existing addr nodes
                                       AND other_osm_addr_areas.type IS NULL; -- or to existing addr areas''', (degree_expand, building, degree_expand, building, degree_expand, building))
                 curs.execute('''WITH to_delete AS (
-                                  UPDATE import_addresses
+                                  UPDATE import_address_nodes
                                     SET pending_delete = TRUE
                                   FROM building_matches
-                                    WHERE import_addresses.import_id = building_matches.import_id
+                                    WHERE import_address_nodes.import_id = building_matches.import_id
                                       AND building_matches.type = 'W'
                                     RETURNING building_matches.id AS id, building_matches.merged_tags )
                                 INSERT INTO changed_ways (id, version, tags, nodes)
                                   SELECT ways.id, (ways.version+1), to_delete.merged_tags, ways.nodes
                                     FROM to_delete JOIN ways ON to_delete.id=ways.id;''')
-            curs.execute('''DELETE FROM import_addresses
+            curs.execute('''DELETE FROM import_address_nodes
                             WHERE pending_delete
                             RETURNING import_id;''')
             deleted |= set(id[0] for id in curs.fetchall())
-            curs.execute('''ANALYZE import_addresses;''')
+            curs.execute('''ANALYZE import_address_nodes;''')
             curs.connection.commit()
 
             return deleted
