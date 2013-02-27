@@ -68,6 +68,16 @@ class OSMSource(object):
                             tags hstore,
                             pending_delete boolean DEFAULT FALSE);''')
 
+            curs.execute('''CREATE  TABLE import_address_areas
+                            (import_id integer PRIMARY KEY,
+                            geom geometry,
+                            tags hstore,
+                            coords bigint[],
+                            pending_delete boolean DEFAULT FALSE);''')
+
+            curs.execute('''CREATE TEMPORARY TABLE deletable_points
+                            (import_id integer PRIMARY KEY);''')
+
             curs.execute('''CREATE TEMPORARY VIEW local_nodes AS
                             SELECT id, tags, geom FROM nodes
                             WHERE ST_Intersects(geom, ST_GeomFromText(%s,4326));''',
@@ -151,8 +161,8 @@ class OSMSource(object):
             if curs is not None:
                 curs.close()
 
-    def load_addresses(self, addresses):
-        l.debug('Loading addresses')
+    def load_address_nodes(self, addresses):
+        l.debug('Loading address nodes')
         curs = None
         try:
             curs = self._conn.cursor()
@@ -169,6 +179,37 @@ class OSMSource(object):
                             WITH (FILLFACTOR=100);''')
             curs.execute('''ANALYZE import_address_nodes;''')
             curs.connection.commit()
+        except BaseException:
+            if curs is not None:
+                curs.connection.rollback()
+            raise
+        finally:
+            if curs is not None:
+                curs.close()
+
+    def load_address_ways(self, ways, coords):
+        l.debug('Loading address ways')
+        curs = None
+        try:
+            curs = self._conn.cursor()
+            for (id, tags, way_coords) in ways:
+                geom_sql = curs.mogrify('''ST_GeomFromText('LINESTRING(''' +
+                (', '.join(['%s %s' for x in way_coords])) + ''')',4326)''',
+                [n for pair in [coords[n] for n in way_coords] for n in pair])
+# ', '.join(['%s %s' for x in xrange(1,10)])
+                curs.execute('''INSERT INTO import_address_areas
+                                (import_id, geom, tags, coords)
+                                VALUES (%s, ''' + geom_sql + ''', %s, %s);''',
+                                (id, tags, way_coords))
+            l.debug('Indexing and analyzing tables')
+            curs.execute('''CREATE INDEX import_address_ways_addr_idx ON import_address_areas USING btree
+                            ((import_address_areas.tags -> 'addr:housenumber'),
+                            (import_address_areas.tags -> 'addr:street'),
+                            (import_address_areas.tags -> 'addr:city'))
+                            WITH (FILLFACTOR=100);''')
+            curs.execute('''ANALYZE import_address_areas;''')
+            curs.connection.commit()
+
         except BaseException:
             if curs is not None:
                 curs.connection.rollback()
@@ -395,14 +436,25 @@ class OSMSource(object):
 
 class ImportDocument(object):
     def __init__(self, input):
-        self._parser = OSMParser(nodes_callback=self._parse_nodes)
+        self._parser = OSMParser(nodes_callback=self._parse_nodes, coords_callback=self._parse_coords, ways_callback=self._parse_ways)
         self._nodes = deque()
+        self._coords = {}
+        self._ways = deque()
         l.debug('Parsing %s', input)
         self._parser.parse(input)
 
     def _parse_nodes(self, nodes):
         for node in nodes:
             self._nodes.append(node)
+
+    def _parse_coords(self, coords):
+        # Not thread safe!
+        for id, lon, lat in coords:
+            self._coords[id] = (lon, lat)
+
+    def _parse_ways(self, ways):
+        for way in ways:
+            self._ways.append(way)
 
     def _serialize_node(self, f, node):
         xmlnode = etree.Element('node', {'visible':'true', 'id':str(node[0]), 'lon':str(node[2][0]), 'lat':str(node[2][1])})
@@ -447,7 +499,8 @@ class ImportDocument(object):
         f.write(etree.tostring(xmlrelation, pretty_print=True))
 
     def remove_existing(self, existing):
-        existing.load_addresses(self._nodes)
+        existing.load_address_nodes(self._nodes)
+        existing.load_address_ways(self._ways, self._coords)
         duplicates = existing.find_duplicates()
         l.debug('Removing duplicates')
         self._nodes = filter(lambda node: node[0] not in duplicates, self._nodes)
