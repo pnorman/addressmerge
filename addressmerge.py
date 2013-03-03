@@ -218,7 +218,7 @@ class OSMSource(object):
             if curs is not None:
                 curs.close()
 
-    def find_duplicates(self):
+    def find_duplicate_nodes(self):
         l.debug('Finding duplicates')
         curs = None
         try:
@@ -501,7 +501,7 @@ class ImportDocument(object):
     def remove_existing(self, existing):
         existing.load_address_nodes(self._nodes)
         existing.load_address_ways(self._ways, self._coords)
-        duplicates = existing.find_duplicates()
+        duplicates = existing.find_duplicate_nodes()
         l.debug('Removing duplicates')
         self._nodes = filter(lambda node: node[0] not in duplicates, self._nodes)
         l.debug('%d duplicates removed', len(duplicates))
