@@ -219,7 +219,7 @@ class OSMSource(object):
                 curs.close()
 
     def find_duplicate_nodes(self):
-        l.debug('Finding duplicates')
+        l.debug('Finding duplicate nodes')
         curs = None
         try:
             curs = self._conn.cursor()
@@ -246,6 +246,19 @@ class OSMSource(object):
             curs.execute('''COMMIT;''')
             curs.execute('''VACUUM ANALYZE import_address_nodes;''')
             return deleted
+        except BaseException:
+            if curs is not None:
+                curs.connection.rollback()
+            raise
+        finally:
+            if curs is not None:
+                curs.close()
+
+    def find_duplicate_ways(self):
+        l.debug('Finding duplicate nodes')
+        curs = None
+        try:
+            pass
         except BaseException:
             if curs is not None:
                 curs.connection.rollback()
