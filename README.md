@@ -33,10 +33,11 @@ Installation of osmosis and PostgreSQL+PostGIS is beyond the scope of this readm
 
 It is possible to use an existing pgsnapshot database kept up to date with minutely diffs. This is beyond the scope of this readme.
 
-To import the data with osmosis from ```dump.osm.pbf``` into the database ```osm``` with postgis and hstore already set up on the database use the commands
+To import the data with osmosis from ```dump.osm.pbf``` into the database ```osm``` with PostGIS and hstore already set up on the database use the commands
 
 ```
 psql -d osm -f <path-to-osmosis>/script/pgsnapshot_schema_0.6.sql
+psql -d osm -f <path-to-osmosis>/script/pgsnapshot_schema_0.6_linestring.sql
 osmosis --read-pbf dump.osm.pbf --write-pgsql host=localhost database=osm user=osm
 ```
 
