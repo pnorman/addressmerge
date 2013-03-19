@@ -128,17 +128,17 @@ class OSMSource(object):
             curs = self._conn.cursor()
             curs.execute('''CREATE TEMPORARY TABLE changed_nodes
                             (id bigint PRIMARY KEY CHECK (id > 0),
-                            version integer CHECK (version > 1),
+                            version integer CHECK (version >= 1),
                             tags hstore,
                             geom geometry);''')
             curs.execute('''CREATE TEMPORARY TABLE changed_ways
                             (id bigint PRIMARY KEY CHECK (id > 0),
-                            version integer CHECK (version > 1),
+                            version integer CHECK (version >= 1),
                             tags hstore,
                             nodes bigint[]);''')
             curs.execute('''CREATE TEMPORARY TABLE changed_relations
                             (id bigint PRIMARY KEY CHECK (id > 0),
-                            version integer CHECK (version > 1),
+                            version integer CHECK (version >= 1),
                             tags hstore,
                             types character(1)[],
                             ids bigint[],
