@@ -232,7 +232,7 @@ class OSMSource(object):
                                 RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
                                 INSERT INTO changed_nodes (id, version, tags, geom)
-                                SELECT nodes.id, (nodes.version+1), to_delete.merged_tags, nodes.geom
+                                SELECT nodes.id, nodes.version, to_delete.merged_tags, nodes.geom
                                 FROM to_delete JOIN nodes ON to_delete.id=nodes.id;''', (nocity,))
                 curs.execute('''WITH to_delete AS
                                 (UPDATE import_addresses
@@ -247,7 +247,7 @@ class OSMSource(object):
                                 RETURNING local_all.id AS id,
                                 (import_addresses.tags || local_all.tags) AS merged_tags)
                                 INSERT INTO changed_ways (id, version, tags, nodes)
-                                SELECT ways.id, (ways.version+1), to_delete.merged_tags, ways.nodes
+                                SELECT ways.id, ways.version, to_delete.merged_tags, ways.nodes
                                 FROM to_delete JOIN ways ON to_delete.id=ways.id;''', (nocity,))
                 # no one likes relations, but we need to support them
                 curs.execute('''WITH to_delete AS
@@ -332,7 +332,7 @@ class OSMSource(object):
                                       AND building_matches.type = 'W'
                                     RETURNING building_matches.id AS id, building_matches.merged_tags )
                                 INSERT INTO changed_ways (id, version, tags, nodes)
-                                  SELECT ways.id, (ways.version+1), to_delete.merged_tags, ways.nodes
+                                  SELECT ways.id, ways.version, to_delete.merged_tags, ways.nodes
                                     FROM to_delete JOIN ways ON to_delete.id=ways.id;''')
             curs.execute('''DELETE FROM import_addresses
                             WHERE pending_delete
